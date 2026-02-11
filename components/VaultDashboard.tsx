@@ -52,12 +52,14 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
     setIsProcessing(true);
     setUploadError(null);
 
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     const reader = new FileReader();
+
     reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      if (text) {
-        // Async call to register upload
-        const result = await registerUpload(selectedDate, file.name, text);
+      const data = e.target?.result;
+      if (data) {
+        // Pass either string (CSV) or ArrayBuffer (Excel)
+        const result = await registerUpload(selectedDate, file.name, data as string | ArrayBuffer);
 
         if (result.success) {
           setLastUpload({ name: file.name, date: selectedDate });
@@ -74,7 +76,11 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
       setIsProcessing(false);
     };
 
-    reader.readAsText(file);
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   // Calendar Navigation Logic
@@ -222,18 +228,28 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
               `}
           >
             {!selectedDate ? (
-              <>
-                <div className="w-12 h-12 border-2 border-alpha-dim flex items-center justify-center rounded-none text-alpha-dim">
-                  <span className="text-2xl font-bold">!</span>
+              <div className="flex flex-col items-center gap-6 p-8">
+                <div className="w-16 h-16 border-2 border-alpha-border flex items-center justify-center text-alpha-dim">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
                 </div>
-                <p className="text-xs font-mono text-alpha-dim uppercase tracking-widest">
-                  Select a valid date on grid to initiate upload
-                </p>
-              </>
+                <div className="text-center space-y-2">
+                  <p className="text-sm font-bold text-white uppercase tracking-widest">
+                    Awaiting Target Date Selection
+                  </p>
+                  <p className="text-[10px] font-mono text-alpha-dim uppercase max-w-[240px]">
+                    Pick a date on the calendar grid above to unlock the Data Stamping Protocol.
+                  </p>
+                </div>
+              </div>
             ) : isProcessing ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-t-white border-r-transparent border-b-white border-l-transparent rounded-full animate-spin"></div>
-                <span className="text-xs font-mono uppercase text-white animate-pulse">Ingesting CSV Data...</span>
+                <div className="w-10 h-10 border-2 border-t-alpha-money border-r-transparent border-b-alpha-money border-l-transparent rounded-full animate-spin"></div>
+                <span className="text-xs font-mono uppercase text-alpha-money animate-pulse">Analyzing Ingested Packets...</span>
               </div>
             ) : uploadError ? (
               <>
@@ -244,63 +260,85 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
                   <p className="text-lg font-display font-bold text-amber-500 uppercase tracking-tight">
                     {uploadError}
                   </p>
-                  <p className="text-xs font-mono text-alpha-dim mt-1 max-w-sm mx-auto">
-                    Verify your Supabase credentials in the `.env` file and ensure the `trades` table exists.
+                  <p className="text-[10px] font-mono text-alpha-dim mt-2 max-w-sm mx-auto">
+                    Ensure the file has valid headers and your database is online.
                   </p>
                 </div>
-                <label className="mt-4 cursor-pointer text-[10px] font-bold uppercase text-white hover:text-amber-500 border-b border-white hover:border-amber-500 transition-colors">
-                  Retry Upload
-                  <input type="file" className="hidden" onChange={handleFileSelect} accept=".csv" />
-                </label>
+                <div className="flex gap-4 mt-6">
+                  <label className="px-6 py-2 bg-white text-black text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-alpha-dim transition-colors">
+                    RETRY UPLOAD
+                    <input type="file" className="hidden" onChange={handleFileSelect} accept=".csv,.xlsx,.xls" />
+                  </label>
+                </div>
               </>
             ) : lastUpload && lastUpload.date === selectedDate && !isDragging ? (
               <>
-                <div className="w-16 h-16 bg-alpha-money text-black flex items-center justify-center rounded-full animate-bounce-short shadow-[0_0_20px_rgba(0,255,65,0.4)]">
+                <div className="w-16 h-16 bg-alpha-money text-black flex items-center justify-center rounded-sm animate-bounce-short shadow-[0_0_20px_rgba(0,255,65,0.4)]">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                 </div>
                 <div className="text-center">
                   <p className="text-lg font-display font-bold text-white uppercase tracking-tight">
-                    Data Stamped Successfully
+                    Flow Recorded
                   </p>
                   <p className="text-xs font-mono text-alpha-dim mt-1">
-                    MAPPED TO: <span className="text-alpha-money">{selectedDate}</span>
+                    STAMPED: <span className="text-alpha-money font-black">{selectedDate}</span>
                   </p>
                   <p className="text-[10px] font-mono text-alpha-dim mt-2 opacity-50">
-                    FILE: {lastUpload.name}
+                    SOURCE: {lastUpload.name}
                   </p>
                 </div>
-                <label className="mt-4 cursor-pointer text-[10px] font-bold uppercase text-white hover:text-alpha-money border-b border-white hover:border-alpha-money transition-colors">
-                  Upload Another
-                  <input type="file" className="hidden" onChange={handleFileSelect} accept=".csv" />
+                <label className="mt-8 px-8 py-3 bg-transparent border border-white text-white text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-white hover:text-black transition-all">
+                  STAMP NEW SHEET
+                  <input type="file" className="hidden" onChange={handleFileSelect} accept=".csv,.xlsx,.xls" />
                 </label>
               </>
             ) : (
-              <>
-                <div className={`w-16 h-16 border-2 flex items-center justify-center rounded-none transition-colors ${isDragging ? 'border-black text-black' : 'border-white text-white'}`}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div className="flex flex-col items-center gap-8 p-12 w-full h-full relative">
+                <div className={`w-20 h-20 border-2 flex items-center justify-center transition-all ${isDragging ? 'border-alpha-money bg-alpha-money text-black animate-pulse' : 'border-dashed border-white/20 text-white/20'}`}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
                 </div>
-                <div className="text-center">
-                  <p className={`text-sm font-bold uppercase tracking-widest mb-1 ${isDragging ? 'text-black' : 'text-white'}`}>
-                    {isDragging ? 'Drop File to Map' : 'Drop CSV or Click to Upload'}
-                  </p>
-                  <p className={`text-[10px] font-mono uppercase ${isDragging ? 'text-black/60' : 'text-alpha-dim'}`}>
-                    Target Date: {selectedDate}
-                  </p>
+
+                <div className="text-center space-y-4">
+                  <div className="space-y-1">
+                    <p className={`text-base font-black uppercase tracking-tighter ${isDragging ? 'text-alpha-money' : 'text-white'}`}>
+                      {isDragging ? 'Release to Ingest' : 'Ingestion Engine Ready'}
+                    </p>
+                    <p className="text-[10px] font-mono text-alpha-dim uppercase">
+                      Target: <span className="text-white">{selectedDate}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-4">
+                    <label className="px-10 py-4 bg-white text-black text-xs font-black uppercase tracking-[0.2em] cursor-pointer hover:bg-alpha-money transition-all shadow-[0_4px_20px_rgba(255,255,255,0.1)] active:scale-95">
+                      Open Document
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileSelect}
+                        accept=".csv,.xlsx,.xls"
+                      />
+                    </label>
+                    <p className="text-[9px] font-mono text-alpha-dim/40 uppercase">
+                      Supports .CSV / .XLSX / .XLS | Auto-Cleaning Active
+                    </p>
+                  </div>
                 </div>
+
                 <input
                   type="file"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={handleFileSelect}
-                  accept=".csv"
-                  disabled={!selectedDate}
+                  accept=".csv,.xlsx,.xls"
+                  disabled={!selectedDate || isProcessing}
+                  title=""
                 />
-              </>
+              </div>
             )}
           </div>
         </div>

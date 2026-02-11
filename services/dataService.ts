@@ -1,5 +1,6 @@
 import { Trade } from '../types';
 import { supabase } from './supabaseClient';
+import * as XLSX from 'xlsx';
 
 const RAW_CSV = `Time,Ticker (#T),TP,Sector,Industry,Sh,$$,RS,PCT,R,Last
 6:08:50 PM,GE,324.32,Industrials,Industrial Conglomerates,72630,23555362,7.46,98.0,,2026-01-02
@@ -99,52 +100,54 @@ const RAW_CSV = `Time,Ticker (#T),TP,Sector,Industry,Sh,$$,RS,PCT,R,Last
 4:14:06 PM,VLO,180.57,Energy,"Oil, Gas and Consumable Fuels",143717,25950979,6.37,96.99,,2026-01-02
 4:12:46 PM,HESM,33.7,Energy,"Oil, Gas and Consumable Fuels",834294,28115708,10.1,99.31,20.0,2025-12-19
 4:12:31 PM,KVYO,29.09,Technology,Software - Infrastructure,2578951,75021685,25.64,100.0,1.0,
-101: 4:12:17 PM,MNDY,142.77,Technology,,452299,64574728,8.86,99.65,10.0,2025-09-15
-102: 4:12:00 PM,SNY,47.51,Healthcare,Pharma,693720,32958637,8.77,99.12,,2025-12-19
-103: 4:11:33 PM,MU,312.15,Technology,Semis,150000,46822500,10.76,98.49,,2026-01-02`;
+4:12:17 PM,MNDY,142.77,Technology,,452299,64574728,8.86,99.65,10.0,2025-09-15
+4:12:00 PM,SNY,47.51,Healthcare,Pharma,693720,32958637,8.77,99.12,,2025-12-19
+4:11:33 PM,MU,312.15,Technology,Semis,150000,46822500,10.76,98.49,,2026-01-02`;
 
 // In-memory cache
 let allTradesCache: Trade[] = [];
 
 // Initialize function
 export const initializeDataService = async () => {
-  // Sync the cache from Supabase on start
   await syncCacheFromSupabase();
 };
 
 const syncCacheFromSupabase = async () => {
-  const { data, error } = await supabase
-    .from('trades')
-    .select('*')
-    .order('last_date', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('trades')
+      .select('*')
+      .order('last_date', { ascending: false });
 
-  if (error) {
-    console.error("Supabase Fetch Error:", error);
-    return;
-  }
+    if (error) {
+      console.error("Supabase Fetch Error:", error);
+      return;
+    }
 
-  if (data && data.length > 0) {
-    // Map database fields back to Trade interface
-    allTradesCache = data.map((t: any) => ({
-      id: t.id,
-      ticker: t.ticker,
-      tradePrice: t.trade_price,
-      sector: t.sector,
-      industry: t.industry,
-      shares: t.shares,
-      value: t.value * 1, // Ensure number
-      rs: t.rs * 1,
-      pct: t.pct * 1,
-      rank: t.rank,
-      lastDate: t.last_date,
-      time: t.time,
-      hash: "0x" + Math.floor(Math.random() * 16777215).toString(16).padEnd(6, '0') + "..." + Math.floor(Math.random() * 65535).toString(16),
-      convictionScore: 0, // Recalculated in processTrades
-      whaleForceScore: 0,
-      defenseScore: 1,
-      sentimentCategory: 'MOMENTUM',
-      sentimentVibe: ''
-    }));
+    if (data && data.length > 0) {
+      allTradesCache = data.map((t: any) => ({
+        id: t.id,
+        ticker: t.ticker,
+        tradePrice: t.trade_price,
+        sector: t.sector,
+        industry: t.industry,
+        shares: t.shares,
+        value: t.value * 1,
+        rs: t.rs * 1,
+        pct: t.pct * 1,
+        rank: t.rank,
+        lastDate: t.last_date,
+        time: t.time,
+        hash: "0x" + Math.floor(Math.random() * 16777215).toString(16).padEnd(6, '0'),
+        convictionScore: 0,
+        whaleForceScore: 0,
+        defenseScore: 1,
+        sentimentCategory: 'MOMENTUM',
+        sentimentVibe: ''
+      }));
+    }
+  } catch (e) {
+    console.error("Critical Sync Error:", e);
   }
 };
 
@@ -153,98 +156,74 @@ export interface UploadResult {
   message?: string;
 }
 
-export const registerUpload = async (date: string, fileName: string, content?: string): Promise<UploadResult> => {
-  if (!content) return { success: false, message: "No content provided" };
+const cleanseData = (data: any[]): any[] => {
+  if (!data.length) return data;
+  const forbiddenPatterns = [/^(cp|current[\s_]*price)$/i];
+
+  return data.map(row => {
+    const cleanRow: any = {};
+    Object.keys(row).forEach(key => {
+      const isForbidden = forbiddenPatterns.some(pattern => pattern.test(key));
+      if (!isForbidden) {
+        cleanRow[key] = row[key];
+      }
+    });
+    return cleanRow;
+  });
+};
+
+export const registerUpload = async (date: string, fileName: string, data: string | ArrayBuffer): Promise<UploadResult> => {
+  if (!data) return { success: false, message: "No data provided" };
 
   try {
-    const rawTrades = parseCSVContent(content, date);
+    let rawJson: any[] = [];
 
-    // Transform for Supabase (Snake Case to match Postgres)
-    const dbTrades = rawTrades.map(t => ({
-      ticker: t.ticker,
-      trade_price: t.tradePrice,
-      sector: t.sector,
-      industry: t.industry,
-      shares: t.shares,
-      value: t.value,
-      rs: t.rs,
-      pct: t.pct,
-      rank: t.rank,
-      last_date: t.lastDate,
-      time: t.time
-    }));
+    if (typeof data === 'string') {
+      const workbook = XLSX.read(data, { type: 'string' });
+      const sheetName = workbook.SheetNames[0];
+      rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    } else {
+      const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    }
+
+    const cleanJson = cleanseData(rawJson);
+
+    const dbTrades = cleanJson.map((row: any) => {
+      const ticker = row['Ticker (#T)'] || row['Ticker'] || row['Symbol'] || 'UNKNOWN';
+      const val = parseInt(row['$$'] || row['Value'] || row['TradeValue'] || 0);
+      const rs = parseFloat(row['RS'] || row['RelativeSize'] || 0);
+
+      return {
+        ticker: ticker,
+        trade_price: parseFloat(row['TP'] || row['Price'] || row['TradePrice'] || 0),
+        sector: row['Sector'] || 'Uncategorized',
+        industry: row['Industry'] || 'General',
+        shares: parseInt(row['Sh'] || row['Shares'] || row['Volume'] || 0),
+        value: val,
+        rs: rs,
+        pct: parseFloat(row['PCT'] || row['Percentage'] || 0),
+        rank: row['R'] || row['Rank'] ? parseInt(row['R'] || row['Rank']) : null,
+        last_date: date,
+        time: row['Time'] || new Date().toLocaleTimeString()
+      };
+    });
 
     const { error } = await supabase
       .from('trades')
       .upsert(dbTrades, { onConflict: 'ticker,last_date,time,value' });
 
     if (error) throw error;
-
-    // Re-sync cache after upload
     await syncCacheFromSupabase();
-
     return { success: true };
   } catch (e: any) {
-    console.error("Supabase Upload Error:", e);
-    return { success: false, message: e.message || "Database upload failed." };
+    console.error("Ingestion Error:", e);
+    return { success: false, message: e.message || "Data ingestion failed." };
   }
-};
-
-export const getUploadsForDate = (date: string) => {
-  return allTradesCache.filter(t => t.lastDate === date);
-};
-
-// Helper: Raw Parsing
-const parseCSVContent = (content: string, forceDate?: string): any[] => {
-  const lines = content.split('\n');
-  const temp: any[] = [];
-
-  const parseCSVLine = (line: string): string[] => {
-    const result = [];
-    let start = 0;
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      if (line[i] === '"') {
-        inQuotes = !inQuotes;
-      } else if (line[i] === ',' && !inQuotes) {
-        result.push(line.substring(start, i).replace(/^"|"$/g, ''));
-        start = i + 1;
-      }
-    }
-    result.push(line.substring(start).replace(/^"|"$/g, ''));
-    return result;
-  };
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const cols = parseCSVLine(line);
-    if (cols.length < 5) continue;
-
-    const rank = cols[9] ? parseInt(cols[9]) : null;
-    const rs = parseFloat(cols[7]);
-    const val = parseInt(cols[6]);
-    const ticker = cols[1];
-
-    temp.push({
-      ticker: ticker,
-      tradePrice: parseFloat(cols[2]),
-      sector: cols[3],
-      industry: cols[4],
-      shares: parseInt(cols[5]),
-      value: val,
-      rs: rs,
-      pct: parseFloat(cols[8]),
-      rank: rank,
-      lastDate: forceDate || cols[10] || '2026-01-05',
-      time: cols[0]
-    });
-  }
-  return temp;
 };
 
 export const fetchAllTrades = async (): Promise<Trade[]> => {
-  // If cache is empty, try to sync one last time
   if (allTradesCache.length === 0) {
     await syncCacheFromSupabase();
   }
@@ -253,19 +232,29 @@ export const fetchAllTrades = async (): Promise<Trade[]> => {
 
 const processTradesFromSources = (): Trade[] => {
   let tempTrades: any[] = [];
-
-  // 1. Fallback to Hardcoded Data if database is completely empty
   if (allTradesCache.length === 0) {
-    tempTrades = parseCSVContent(RAW_CSV, '2026-01-05');
+    // Parser for static data string
+    const workbook = XLSX.read(RAW_CSV, { type: 'string' });
+    tempTrades = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+    // Map static data to normalized format
+    tempTrades = tempTrades.map(row => ({
+      ticker: row['Ticker (#T)'],
+      tradePrice: row['TP'],
+      sector: row['Sector'],
+      industry: row['Industry'],
+      shares: row['Sh'],
+      value: row['$$'],
+      rs: row['RS'],
+      pct: row['PCT'],
+      rank: row['R'] || null,
+      lastDate: '2026-01-05',
+      time: row['Time']
+    }));
   } else {
     tempTrades = [...allTradesCache];
   }
 
-  // Calculate Maximums for Scoring
-  let maxRS = 0;
-  let maxVal = 0;
-  let minVal = Infinity;
-
+  let maxRS = 0; let maxVal = 0; let minVal = Infinity;
   tempTrades.forEach(t => {
     if (t.rs > maxRS) maxRS = t.rs;
     if (t.value > maxVal) maxVal = t.value;
@@ -275,7 +264,6 @@ const processTradesFromSources = (): Trade[] => {
   const maxLogValue = Math.log10(maxVal > 0 ? maxVal : 1);
   const minLogValue = Math.log10(minVal > 0 ? minVal : 1000000);
 
-  // Calculate Scores & Intelligence Logic
   const processedTrades = tempTrades.map(t => {
     let convictionScore = t.rs * 2;
     if (t.rank !== null) convictionScore += (100 - t.rank) * 2.5;
@@ -331,7 +319,7 @@ const processTradesFromSources = (): Trade[] => {
     };
   });
 
-  // DNA & Clusters & Gravity (Same logic as before)
+  // DNA & Clusters & Gravity
   const tickerGroups: Record<string, Trade[]> = {};
   processedTrades.forEach(t => {
     if (!tickerGroups[t.ticker]) tickerGroups[t.ticker] = [];
@@ -399,4 +387,8 @@ export const applyBitcoinIntel = (trades: Trade[], date: string): Trade[] => {
     }
     return { ...t, btcContext: ctx } as Trade;
   });
-}
+};
+
+export const getUploadsForDate = (date: string) => {
+  return allTradesCache.filter(t => t.lastDate === date);
+};
