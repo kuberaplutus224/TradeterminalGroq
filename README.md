@@ -1,8 +1,9 @@
-# TRADE_TERMINAL // WHALE_FLOW v3.0
+# TRADE_TERMINAL // WHALE_FLOW v4.0
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Tech Stack](https://img.shields.io/badge/stack-React_19_TypeScript_Tailwind-black)
 ![AI Engine](https://img.shields.io/badge/AI_Inference-Groq_Llama_3.3_70B-red)
+![Database](https://img.shields.io/badge/storage-Supabase_PostgreSQL-blue)
 ![Deployment](https://img.shields.io/badge/deploy-Vercel-black)
 
 ## 🌐 [EXPLORE THE LIVE TERMINAL](https://v0-tradeterminal.vercel.app/)
@@ -10,66 +11,54 @@
 > **"Signal is brilliance. Noise is darkness. Trade with the Whales."**
 
 ## // EXECUTIVE SUMMARY
-**TradeTerminal** is an AI-native financial intelligence workstation built to decode institutional trade flow. By leveraging specialized AI agents and high-speed inference, it transforms thousands of raw trade signals into a clean, actionable narrative. 
+**TradeTerminal** is an AI-native financial intelligence workstation built to decode institutional trade flow. By leveraging specialized AI agents and high-speed inference, it transforms thousands of raw trade signals into a clean, actionable narrative with a focus on **Institutional Ingestion** and **Data Integrity**.
 
-Developed with an **AI-First** philosophy, TradeTerminal focuses on reducing cognitive load for analysts by scoring conviction, predicting narratives, and providing instant adversarial peer reviews for every major "Whale" move.
+The system now features a robust, calendar-locked ingestion pipeline designed to mirror real-world exchange hours and data schemas.
 
 ---
 
 ## // THE AI ARCHITECTURE (PROXIMITY AGENTS)
 
-The core of TradeTerminal is its integration with **Groq**, utilizing the **Llama 3.3 70B** model for near-instant (sub-200ms) inference. The system employs a multi-agent logic flow:
+The core of TradeTerminal is its integration with **Groq**, utilizing the **Llama 3.3 70B** model for near-instant (sub-200ms) inference. 
 
-### 1. ⚡ The Luminance Agent (Visual Context)
-- **Function**: Algorithmic scoring of trade conviction.
-- **Logic**: Combines Value, Relative Size (RS), and Sector Momentum into a `WhaleForceScore`.
-- **UX**: High-conviction signals (>80) physically **glow** with neon aesthetics, while noise is suppressed via opacity shifts.
-
-### 2. 📖 REQ Narrative Agent (The Analyst)
-- **Function**: Converts raw trade data into human-readable conviction statements.
-- **Logic**: Ingests ticker metadata and institutional block size to "tell the story" of the entry.
-- **Example**: *"Aggressive accumulation in Technology sector, targeting semi-conductor recovery."*
-
-### 3. 🛡️ Adversarial Peer Review (The Bear)
-- **Function**: Hostile "Red Team" analysis.
-- **Logic**: For every bullish signal, this agent generates a 2-sentence bearish case to prevent trader confirmation bias.
-- **Goal**: Skeptical exposure of risks like "Gamma Trap" or "Liquidity Exhaustion."
-
-### 4. 📰 Macro Synthesis (Daily Brief)
-- **Function**: Executive summary of the entire session.
-- **Logic**: Aggregates 50+ institutional blocks into the 3 most critical market-wide rotation insights.
-
-### 5. 🔊 Command Control (Natural Language Interface)
-- **Function**: Dashboard filtering via natural language.
-- **Logic**: Uses Llama 3.3 to parse queries like *"Show me massive tech blocks from today"* into optimized internal filters.
+### Core AI Agents:
+- **⚡ The Luminance Agent**: Algorithmic scoring of trade conviction (`WhaleForceScore`).
+- **📖 REQ Narrative Agent**: Converts raw trade blocks into human-readable entry stories.
+- **🛡️ Adversarial Peer Review**: Generates "Red Team" bearish cases for every signal to kill confirmation bias.
+- **📰 Macro Synthesis**: Daily briefing on critical sector rotation and institutional positioning.
+- **🔊 Command Control**: Natural language dashboard filtering (e.g., *"Show me massive semiconductors from today"*).
 
 ---
 
-## // CORE FEATURES
+## // INSTITUTIONAL INGESTION (THE VAULT)
 
-### 🗺️ Liquidity Map
-A high-fidelity visualizer for market value distribution, highlighting where the most significant capital is being deployed across sectors.
+The **Vault** has been upgraded to a professional-grade ingestion engine capable of handling institutional-style data exports.
 
-### 📊 Sector Leaderboard & Alpha Scoring
-Real-time tracking of sector velocity. Identification of "Alpha" sectors where institutional conviction is accelerating faster than the broader index.
+### 📊 Multi-Format Ingestion
+- **Native Support**: Full support for `.XLSX`, `.XLS`, and `.CSV` documents.
+- **Fuzzy Header Mapping**: Intelligent matching engine that can identify columns like `Ticker (#T)`, `$$`, `Price`, and `Shares` regardless of casing or symbols.
+- **Multi-Row Scanning**: Automatically deep-scans the first 10 rows of any document to locate the true data header, effectively bypassing metadata and title rows.
 
-### 🏛️ The Vault
-A robust, auto-indexing data pipeline that ingests commercial institutional flow (CSV/JSON) and normalizes it against "Schema Drift."
+### 🏛️ Market Calendar Guard
+- **Schedule Synchronicity**: Hard-coded **NYSE/NASDAQ 2026 Holiday Schedule**.
+- **Upload Restrictions**: Blocks all data ingestion on Saturdays, Sundays, and major Exchange holidays (e.g., Martin Luther King Jr. Day, Thanksgiving, etc.).
+- **UI Locking**: The ingestion engine physically locks its interface on non-trading days with clear status feedback.
 
-### 📱 Intelligence Sidebar
-A contextual sidebar that activates when a trade is selected, providing a deep-dive into the AI Narrative, Peer Review, and Technical Defence scores.
+### 🧹 Auto-Cleaning & Integrity
+- **CP Removal**: Automatically identifies and strips out "Current Price" columns before storage.
+- **Deduplication**: A transaction-level compression engine that prevents duplicate row ingestion ("ON CONFLICT" protection).
+- **Currency Normalization**: Cleans currency symbols ($) and commas from financial strings automatically.
 
 ---
 
 ## // TECH STACK
 
 - **Frontend**: React 19 (Hooks, Error Boundaries)
-- **Build Tool**: Vite 6 (Manual Chunk Optimization)
-- **Database**: Supabase (PostgreSQL) - Persistent Storage
-- **Styling**: Vanilla CSS + Tailwind (Custom Glassmorphism & Neon Design System)
-- **AI Inference**: Groq SDK (Llama 3.3 70B Versatile)
-- **Type Safety**: TypeScript 5.8 (Strict Mode)
-- **Architecture**: Atomic Components with Context-based Store.
+- **Database**: **Supabase (PostgreSQL)** - Persistent institutional storage.
+- **AI Inference**: **Groq SDK** (Llama 3.3 70B Versatile).
+- **Excel Handling**: `xlsx` (SheetJS).
+- **Styling**: Vanilla CSS + Tailwind (Custom Glassmorphism & Neon Design System).
+- **Type Safety**: TypeScript 5.8 (Strict Mode).
 
 ---
 
@@ -82,8 +71,10 @@ graph TD
     classDef data fill:#dfd,stroke:#333,stroke-width:2px;
 
     subgraph Data Layer
-    A["Institutional CSV/API"] --> B["The Vault (Normalizer)"]
+    A["Excel/CSV Document"] --> B["The Vault (Deep Scan)"]
+    K["Market Calendar Guard"] -- Blocks --> B
     B --> C["WhaleForce Engine (Algo)"]
+    C --> L[("Supabase DB")]
     end
 
     subgraph AI Inference Layer (Groq)
@@ -98,29 +89,31 @@ graph TD
     H -->|Select Trade| I["Intelligence Sidebar"]:::ui
     D & E --> I
     end
-
-    C --> J["Luminance Effects (CSS Glow)"]
 ```
 
 ---
 
-## // INSTALLATION
+## // INSTALLATION & SETUP
 
 1. **Clone & Install**
    ```bash
-   git clone https://github.com/kuberaplutus224/TradeTerminal.git
+   git clone https://github.com/kuberaplutus224/TradeterminalGroq.git
    npm install
    ```
 
-2. **Environment Configuration**
-   Create a `.env` file in the root:
+2. **Environment Configuration** (`.env`)
    ```env
-   GROQ_API_KEY=gsk_...
+   GROQ_API_KEY=gsk_your_key
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_key
    ```
 
-3. **Inbound Deployment**
+3. **Database Setup**
+   Ensure your Supabase `trades` table has a unique constraint on `(ticker, last_date, time, value)` to support deduplication.
+
+4. **Launch Application**
    ```bash
-   npm run build
+   npm run dev
    ```
 
 ---
