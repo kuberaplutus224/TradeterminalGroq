@@ -85,20 +85,20 @@ graph TD
     classDef ui fill:#bbf,stroke:#333,stroke-width:2px;
     classDef data fill:#dfd,stroke:#333,stroke-width:2px;
 
-    subgraph Data Layer
+    subgraph DataLayer ["Data Layer"]
     A["Excel/CSV Document"] --> B["The Vault (Deep Scan)"]
     K["Market Calendar Guard"] -- Blocks --> B
     B --> C["WhaleForce Engine (Algo)"]
-    C --> L[("Supabase DB")]
+    C --> L["Supabase DB"]
     end
 
-    subgraph AI Inference Layer (Groq)
+    subgraph AIInference ["AI Inference Layer (Groq)"]
     C --> D["Llama 3.3: Narrative Agent"]:::ai
     C --> E["Llama 3.3: Peer Review"]:::ai
     C --> F["Llama 3.3: Command Parser"]:::ai
     end
 
-    subgraph Interface Layer
+    subgraph InterfaceLayer ["Interface Layer"]
     G["Command Bar"] --> F
     F -->|Filter| H["Dashboard View"]:::ui
     H -->|Select Trade| I["Intelligence Sidebar"]:::ui
