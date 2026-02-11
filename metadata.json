@@ -1,0 +1,5 @@
+{
+  "name": "TradeTerminal Conviction Dashboard",
+  "description": "A high-contrast, minimalist dashboard tracking institutional trade conviction based on Relative Strength and Rank, excluding current price action.",
+  "requestFramePermissions": []
+}
