@@ -17,48 +17,63 @@ The system now features a robust, calendar-locked ingestion pipeline designed to
 
 ---
 
-## // THE AI ARCHITECTURE (PROXIMITY AGENTS)
+## // THE AI CORE (PROXIMITY AGENTS)
 
-The core of TradeTerminal is its integration with **Groq**, utilizing the **Llama 3.3 70B** model for near-instant (sub-200ms) inference. 
+TradeTerminal utilizes **Groq-accelerated Llama 3.3 70B** to provide sub-200ms intelligence on every trade.
 
-### Core AI Agents:
-- **⚡ The Luminance Agent**: Algorithmic scoring of trade conviction (`WhaleForceScore`).
-- **📖 REQ Narrative Agent**: Converts raw trade blocks into human-readable entry stories.
-- **🛡️ Adversarial Peer Review**: Generates "Red Team" bearish cases for every signal to kill confirmation bias.
-- **📰 Macro Synthesis**: Daily briefing on critical sector rotation and institutional positioning.
-- **🔊 Command Control**: Natural language dashboard filtering (e.g., *"Show me massive semiconductors from today"*).
+### ⚡ The Luminance Agent (WhaleForce)
+*   **WhaleForce Scoring**: An algorithmic composite of Value, Relative Size (RS), and Sector Momentum.
+*   **Visual Logic**: High-conviction signals (>80) physically **glow** with custom neon CSS shaders, while low-conviction noise is suppressed.
+
+### 🛡️ Adversarial Peer Review (The Bear)
+*   **Confirmation Bias Killer**: For every bullish institutional trade, the system generates a hostile "Red Team" bearish case to expose risks like "Gamma Traps" or "Liquidity Exhaustion."
+
+### � Narrative Synthesis
+*   **REQ Narrative Agent**: Converts raw block trades into human-readable conviction stories.
+*   **Macro Briefing**: Aggregates daily flow into the top 3 most critical market-wide rotation insights.
 
 ---
 
 ## // INSTITUTIONAL INGESTION (THE VAULT)
 
-The **Vault** has been upgraded to a professional-grade ingestion engine capable of handling institutional-style data exports.
-
-### 📊 Multi-Format Ingestion
-- **Native Support**: Full support for `.XLSX`, `.XLS`, and `.CSV` documents.
-- **Fuzzy Header Mapping**: Intelligent matching engine that can identify columns like `Ticker (#T)`, `$$`, `Price`, and `Shares` regardless of casing or symbols.
-- **Multi-Row Scanning**: Automatically deep-scans the first 10 rows of any document to locate the true data header, effectively bypassing metadata and title rows.
+The **Vault** is a professional-grade normalization pipeline designed for large-scale institutional data exports.
 
 ### 🏛️ Market Calendar Guard
-- **Schedule Synchronicity**: Hard-coded **NYSE/NASDAQ 2026 Holiday Schedule**.
-- **Upload Restrictions**: Blocks all data ingestion on Saturdays, Sundays, and major Exchange holidays (e.g., Martin Luther King Jr. Day, Thanksgiving, etc.).
-- **UI Locking**: The ingestion engine physically locks its interface on non-trading days with clear status feedback.
+*   **Operational Awareness**: Hard-coded **NYSE/NASDAQ 2026 Holiday Schedule**.
+*   **Locking Mechanism**: Physically disables ingestion on Saturdays, Sundays, and Exchange Holidays (MLK, Thanksgiving, etc.) to ensure date-stamp integrity.
 
-### 🧹 Auto-Cleaning & Integrity
-- **CP Removal**: Automatically identifies and strips out "Current Price" columns before storage.
-- **Deduplication**: A transaction-level compression engine that prevents duplicate row ingestion ("ON CONFLICT" protection).
-- **Currency Normalization**: Cleans currency symbols ($) and commas from financial strings automatically.
+### 📊 Ingestion Intelligence
+*   **Multi-Format Support**: Native parsing for `.XLSX`, `.XLS`, and `.CSV` via `xlsx` (SheetJS).
+*   **Header Deep Scan**: Scans the first 10 rows of any document to locate the true header, bypassing metadata/title rows.
+*   **Fuzzy Mapping**: Intelligent matching for `Ticker (#T)`, `$$`, `TP`, `Shares`, and `Rank` regardless of format.
+
+### 🧹 Data Hygiene & Integrity
+*   **Auto-Cleaning**: Automatically identifies and strips "CP" (Current Price) columns to prevent schema pollution.
+*   **Deduplication**: Multi-key compression logic prevents duplicate trade rows from being recorded in the database.
+*   **Numerical Normalization**: Auto-handles currency symbols ($) and commas in all financial fields.
+
+---
+
+## // CORE WORKSTATION FEATURES
+
+### 🗺️ Liquidity Map
+A high-fidelity visualizer mapping market value distribution across sectors, highlighting massive capital pools in real-time.
+
+### 📊 Sector Leaderboard
+Identifies "Alpha" sectors where institutional conviction is accelerating faster than the broader index.
+
+### 📱 Contextual Intelligence Sidebar
+Dynamic side-panel that reveals AI Narratives, Peer Reviews, and technical conviction scores whenever a trade is selected.
 
 ---
 
 ## // TECH STACK
 
-- **Frontend**: React 19 (Hooks, Error Boundaries)
-- **Database**: **Supabase (PostgreSQL)** - Persistent institutional storage.
-- **AI Inference**: **Groq SDK** (Llama 3.3 70B Versatile).
-- **Excel Handling**: `xlsx` (SheetJS).
-- **Styling**: Vanilla CSS + Tailwind (Custom Glassmorphism & Neon Design System).
-- **Type Safety**: TypeScript 5.8 (Strict Mode).
+*   **Frontend**: React 19 (Hooks/Context)
+*   **Database**: **Supabase (PostgreSQL)** - Persistent storage with unique trade indexing.
+*   **AI Engine**: **Groq SDK** (Llama 3.3 70B Versatile).
+*   **Build System**: Vite 6.
+*   **Type Safety**: TypeScript 5.8 (Strict Mode).
 
 ---
 
