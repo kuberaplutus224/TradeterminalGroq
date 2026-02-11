@@ -172,6 +172,63 @@ const cleanseData = (data: any[]): any[] => {
   });
 };
 
+const findKey = (row: any, patterns: (string | RegExp)[]): string | undefined => {
+  const keys = Object.keys(row);
+  for (const pattern of patterns) {
+    const found = keys.find(k => {
+      if (typeof pattern === 'string') {
+        return k.toLowerCase().includes(pattern.toLowerCase());
+      }
+      return pattern.test(k);
+    });
+    if (found) return found;
+  }
+  return undefined;
+};
+
+const getValue = (row: any, patterns: (string | RegExp)[], defaultValue: any = null) => {
+  const key = findKey(row, patterns);
+  return key ? row[key] : defaultValue;
+};
+
+const processRowsWithHeaderScanning = (rows: any[][]): any[] => {
+  if (rows.length === 0) return [];
+
+  // 1. Find the header row (scan first 10 rows)
+  let headerIndex = -1;
+  const headerPatterns = [/ticker/i, /symbol/i, /#T/i, /value/i, /\$\$/i, /price/i];
+
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    const row = rows[i];
+    if (Array.isArray(row)) {
+      const matches = row.filter(cell =>
+        headerPatterns.some(pattern => pattern.test(String(cell)))
+      ).length;
+
+      if (matches >= 2) { // Found a row with at least 2 technical keywords
+        headerIndex = i;
+        break;
+      }
+    }
+  }
+
+  // If no header found, assume row 0
+  if (headerIndex === -1) {
+    headerIndex = 0;
+  }
+
+  const headers = rows[headerIndex].map(h => String(h || "").trim());
+  const dataRows = rows.slice(headerIndex + 1);
+
+  return dataRows.map(row => {
+    const obj: any = {};
+    headers.forEach((header, idx) => {
+      if (header) obj[header] = row[idx];
+    });
+    return obj;
+  }).filter(obj => Object.keys(obj).length > 0);
+};
+
 export const registerUpload = async (date: string, fileName: string, data: string | ArrayBuffer): Promise<UploadResult> => {
   if (!data) return { success: false, message: "No data provided" };
 
@@ -180,39 +237,70 @@ export const registerUpload = async (date: string, fileName: string, data: strin
 
     if (typeof data === 'string') {
       const workbook = XLSX.read(data, { type: 'string' });
-      const sheetName = workbook.SheetNames[0];
-      rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+      rawJson = processRowsWithHeaderScanning(rows);
     } else {
       const workbook = XLSX.read(new Uint8Array(data), { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+      rawJson = processRowsWithHeaderScanning(rows);
     }
 
     const cleanJson = cleanseData(rawJson);
 
     const dbTrades = cleanJson.map((row: any) => {
-      const ticker = row['Ticker (#T)'] || row['Ticker'] || row['Symbol'] || 'UNKNOWN';
-      const val = parseInt(row['$$'] || row['Value'] || row['TradeValue'] || 0);
-      const rs = parseFloat(row['RS'] || row['RelativeSize'] || 0);
+      // Prioritize the exact headers provided by the user: Ticker (#T), $$, TP, Sh, etc.
+      const ticker = getValue(row, ['Ticker (#T)', /ticker/i, /symbol/i, /#T/i], 'UNKNOWN');
+      const valRaw = getValue(row, ['$$', /\$\$/i, /value/i, /amount/i], '0');
+      const val = typeof valRaw === 'number' ? valRaw : parseInt(String(valRaw).replace(/[$,]/g, '')) || 0;
+
+      const rsRaw = getValue(row, ['RS', /rs/i, /rel/i, /size/i], '0');
+      const rs = typeof rsRaw === 'number' ? rsRaw : parseFloat(String(rsRaw)) || 0;
+
+      const priceRaw = getValue(row, ['TP', /tp/i, /price/i, /cost/i], '0');
+      const price = typeof priceRaw === 'number' ? priceRaw : parseFloat(String(priceRaw)) || 0;
+
+      const sharesRaw = getValue(row, ['Sh', /sh/i, /shares/i, /vol/i], '0');
+      const shares = typeof sharesRaw === 'number' ? sharesRaw : parseInt(String(sharesRaw).replace(/[,]/g, '')) || 0;
+
+      const pctRaw = getValue(row, ['PCT', /pct/i, /%/i, /percentage/i], '0');
+      const pct = typeof pctRaw === 'number' ? pctRaw : parseFloat(String(pctRaw)) || 0;
+
+      const rankValue = getValue(row, ['R', / r /i, /^r$/i, /rank/i], null);
 
       return {
-        ticker: ticker,
-        trade_price: parseFloat(row['TP'] || row['Price'] || row['TradePrice'] || 0),
-        sector: row['Sector'] || 'Uncategorized',
-        industry: row['Industry'] || 'General',
-        shares: parseInt(row['Sh'] || row['Shares'] || row['Volume'] || 0),
+        ticker: String(ticker).toUpperCase(),
+        trade_price: price,
+        sector: getValue(row, ['Sector', /sector/i], 'Uncategorized'),
+        industry: getValue(row, ['Industry', /industry/i], 'General'),
+        shares: shares,
         value: val,
         rs: rs,
-        pct: parseFloat(row['PCT'] || row['Percentage'] || 0),
-        rank: row['R'] || row['Rank'] ? parseInt(row['R'] || row['Rank']) : null,
+        pct: pct,
+        rank: rankValue !== null ? parseInt(String(rankValue)) : null,
         last_date: date,
-        time: row['Time'] || new Date().toLocaleTimeString()
+        time: getValue(row, ['Time', /time/i, /clock/i], new Date().toLocaleTimeString())
       };
+    }).filter(t => t.ticker !== 'UNKNOWN' && t.value > 0);
+
+    // Deduplicate dbTrades
+    const uniqueTradesMap = new Map();
+    dbTrades.forEach(t => {
+      const key = `${t.ticker}-${t.last_date}-${t.time}-${t.value}`;
+      if (!uniqueTradesMap.has(key)) {
+        uniqueTradesMap.set(key, t);
+      }
     });
+    const uniqueDbTrades = Array.from(uniqueTradesMap.values());
+
+    if (uniqueDbTrades.length === 0) {
+      return { success: false, message: "No valid trades found. Ensure headers like Ticker and Value are present." };
+    }
 
     const { error } = await supabase
       .from('trades')
-      .upsert(dbTrades, { onConflict: 'ticker,last_date,time,value' });
+      .upsert(uniqueDbTrades, { onConflict: 'ticker,last_date,time,value' });
 
     if (error) throw error;
     await syncCacheFromSupabase();

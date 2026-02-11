@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { registerUpload, getUploadsForDate } from '../services/dataService';
+import { isMarketClosed } from '../services/marketCalendar';
 
 interface VaultDashboardProps {
   onDataUpdate?: () => void;
@@ -12,6 +13,11 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
   const [lastUpload, setLastUpload] = useState<{ name: string, date: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const marketStatus = useMemo(() => {
+    if (!selectedDate) return { closed: false };
+    return isMarketClosed(selectedDate);
+  }, [selectedDate]);
 
   // Minimum date: Jan 02 2000
   const MIN_DATE = new Date(2000, 0, 2);
@@ -176,6 +182,7 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
             const isSelected = selectedDate === date;
             const uploads = getUploadsForDate(date);
             const hasData = uploads.length > 0;
+            const { closed: isClosed } = isMarketClosed(date);
 
             return (
               <button
@@ -183,21 +190,24 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
                 onClick={() => !isDisabled && setSelectedDate(date)}
                 disabled={isDisabled}
                 className={`
-                   aspect-square relative flex flex-col items-start justify-between p-2 transition-all duration-200 group rounded-none
-                   ${isDisabled
+                       aspect-square relative flex flex-col items-start justify-between p-2 transition-all duration-200 group rounded-none
+                       ${isDisabled
                     ? 'bg-alpha-surface/20 text-alpha-dim/20 border-2 border-transparent cursor-not-allowed'
                     : isSelected
                       ? 'bg-white text-black border-2 border-white transform scale-105 z-10 shadow-[0_0_20px_rgba(255,255,255,0.2)]'
-                      : 'bg-black text-alpha-dim border-2 border-alpha-border hover:border-white hover:text-white'
+                      : isClosed
+                        ? 'bg-black text-alpha-dim/40 border-2 border-alpha-border/50 hover:border-white/30 cursor-pointer'
+                        : 'bg-black text-alpha-dim border-2 border-alpha-border hover:border-white hover:text-white'
                   }
-                 `}
+                     `}
               >
                 <span className="text-sm font-display font-bold">{day}</span>
-                {hasData && !isDisabled && (
-                  <div className={`w-full flex justify-end`}>
+                <div className="w-full flex justify-between items-end">
+                  {isClosed && !isDisabled && <span className="text-[7px] font-mono opacity-30">CLOSED</span>}
+                  {hasData && !isDisabled && (
                     <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-black' : 'bg-alpha-money'}`}></span>
-                  </div>
-                )}
+                  )}
+                </div>
               </button>
             );
           })}
@@ -217,7 +227,7 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
             onDrop={handleDrop}
             className={`
                 relative h-64 border-2 transition-all duration-300 flex flex-col items-center justify-center gap-4 rounded-none
-                ${!selectedDate
+                ${!selectedDate || marketStatus.closed
                 ? 'border-alpha-border bg-alpha-surface/30 cursor-not-allowed opacity-50'
                 : isDragging
                   ? 'border-white bg-white text-black scale-[1.01]'
@@ -243,6 +253,23 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
                   </p>
                   <p className="text-[10px] font-mono text-alpha-dim uppercase max-w-[240px]">
                     Pick a date on the calendar grid above to unlock the Data Stamping Protocol.
+                  </p>
+                </div>
+              </div>
+            ) : marketStatus.closed ? (
+              <div className="flex flex-col items-center gap-6 p-8">
+                <div className="w-16 h-16 border-2 border-alpha-dim/30 flex items-center justify-center text-alpha-dim/50">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                  </svg>
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-sm font-black text-alpha-dim uppercase tracking-tighter">
+                    {marketStatus.reason}
+                  </p>
+                  <p className="text-[10px] font-mono text-alpha-dim uppercase max-w-[240px]">
+                    Ingestion Disabled. Markets are not operational on <span className="text-white">{selectedDate}</span>.
                   </p>
                 </div>
               </div>
@@ -335,7 +362,7 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={handleFileSelect}
                   accept=".csv,.xlsx,.xls"
-                  disabled={!selectedDate || isProcessing}
+                  disabled={!selectedDate || isProcessing || marketStatus.closed}
                   title=""
                 />
               </div>
