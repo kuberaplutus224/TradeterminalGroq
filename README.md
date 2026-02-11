@@ -69,11 +69,13 @@ Dynamic side-panel that reveals AI Narratives, Peer Reviews, and technical convi
 
 ## // TECH STACK
 
-*   **Frontend**: React 19 (Hooks/Context)
-*   **Database**: **Supabase (PostgreSQL)** - Persistent storage with unique trade indexing.
-*   **AI Engine**: **Groq SDK** (Llama 3.3 70B Versatile).
-*   **Build System**: Vite 6.
-*   **Type Safety**: TypeScript 5.8 (Strict Mode).
+- **Frontend**: React 19 (Hooks, Error Boundaries)
+- **Build Tool**: Vite 6 (Manual Chunk Optimization)
+- **Database**: Supabase (PostgreSQL) - Persistent Storage
+- **Styling**: Vanilla CSS + Tailwind (Custom Glassmorphism & Neon Design System)
+- **AI Inference**: Groq SDK (Llama 3.3 70B Versatile)
+- **Type Safety**: TypeScript 5.8 (Strict Mode)
+- **Architecture**: Atomic Components with Context-based Store.
 
 ---
 
