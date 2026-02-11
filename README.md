@@ -85,26 +85,38 @@ Dynamic side-panel that reveals AI Narratives, Peer Reviews, and technical convi
 graph TD
     classDef ai fill:#f96,stroke:#333,stroke-width:2px;
     classDef ui fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef data fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef algo fill:#dfd,stroke:#333,stroke-width:2px;
+    classDef data fill:#eee,stroke:#333,stroke-width:2px;
 
-    subgraph DataLayer ["Data Layer"]
-    A["Excel/CSV Document"] --> B["The Vault (Deep Scan)"]
-    K["Market Calendar Guard"] -- Blocks --> B
-    B --> C["WhaleForce Engine (Algo)"]
-    C --> L["Supabase DB"]
+    subgraph DataIngestion ["The Vault (Ingestion Pipeline)"]
+        Raw["Raw Excel/CSV"] --> Guard["Market Calendar Guard"]
+        Guard --> Scan["Deep Scan & Header Mapping"]
+        Scan --> Clean["Data Hygiene (Auto-Cleaning)"]
     end
 
-    subgraph AIInference ["AI Inference Layer (Groq)"]
-    C --> D["Llama 3.3: Narrative Agent"]:::ai
-    C --> E["Llama 3.3: Peer Review"]:::ai
-    C --> F["Llama 3.3: Command Parser"]:::ai
+    subgraph IntelligenceEngine ["WhaleForce Algorithmic Engine"]
+        Clean --> WS["WhaleForce Scoring (Conviction/Defense)"]
+        WS --> SM["Sentiment Analysis (SentimentVibe)"]
+        SM --> GC["Gravity & Shadow Clusters"]
+        BTC["Bitcoin Context Intel"] --> WS
     end
 
-    subgraph InterfaceLayer ["Interface Layer"]
-    G["Command Bar"] --> F
-    F -->|Filter| H["Dashboard View"]:::ui
-    H -->|Select Trade| I["Intelligence Sidebar"]:::ui
-    D & E --> I
+    L["Supabase DB"] <--> WS
+
+    subgraph GroqLayer ["AI Inference Layer (Llama 3.3 70B)"]
+        L --> DA["Daily Brief Agent"]:::ai
+        L --> AD["Anomaly Detection Agent"]:::ai
+        WS --> NA["Narrative Agent (REQ)"]:::ai
+        WS --> PR["Adversarial Peer Review"]:::ai
+        CB["Command Bar"] --> CP["Command Parser Agent"]:::ai
+    end
+
+    subgraph InterfaceLayer ["Terminal Interface"]
+        DA --> MB["Macro Briefing UI"]:::ui
+        AD --> CS["Cluster Alert Sidebar"]:::ui
+        NA & PR --> IS["Intelligence Sidebar"]:::ui
+        CP -->|Filter| DV["Dashboard View"]:::ui
+        DV -->|Select Trade| IS
     end
 ```
 
