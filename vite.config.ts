@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             'vendor-react': ['react', 'react-dom'],
             'vendor-groq': ['groq-sdk'],
+            'vendor-supabase': ['@supabase/supabase-js'],
           }
         }
       }

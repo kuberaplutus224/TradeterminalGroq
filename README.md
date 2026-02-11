@@ -65,6 +65,7 @@ A contextual sidebar that activates when a trade is selected, providing a deep-d
 
 - **Frontend**: React 19 (Hooks, Error Boundaries)
 - **Build Tool**: Vite 6 (Manual Chunk Optimization)
+- **Database**: Supabase (PostgreSQL) - Persistent Storage
 - **Styling**: Vanilla CSS + Tailwind (Custom Glassmorphism & Neon Design System)
 - **AI Inference**: Groq SDK (Llama 3.3 70B Versatile)
 - **Type Safety**: TypeScript 5.8 (Strict Mode)

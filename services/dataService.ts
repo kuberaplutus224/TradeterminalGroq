@@ -1,4 +1,5 @@
 import { Trade } from '../types';
+import { supabase } from './supabaseClient';
 
 const RAW_CSV = `Time,Ticker (#T),TP,Sector,Industry,Sh,$$,RS,PCT,R,Last
 6:08:50 PM,GE,324.32,Industrials,Industrial Conglomerates,72630,23555362,7.46,98.0,,2026-01-02
@@ -98,70 +99,52 @@ const RAW_CSV = `Time,Ticker (#T),TP,Sector,Industry,Sh,$$,RS,PCT,R,Last
 4:14:06 PM,VLO,180.57,Energy,"Oil, Gas and Consumable Fuels",143717,25950979,6.37,96.99,,2026-01-02
 4:12:46 PM,HESM,33.7,Energy,"Oil, Gas and Consumable Fuels",834294,28115708,10.1,99.31,20.0,2025-12-19
 4:12:31 PM,KVYO,29.09,Technology,Software - Infrastructure,2578951,75021685,25.64,100.0,1.0,
-4:12:17 PM,MNDY,142.77,Technology,,452299,64574728,8.86,99.65,10.0,2025-09-15
-4:12:00 PM,SNY,47.51,Healthcare,Pharma,693720,32958637,8.77,99.12,,2025-12-19
-4:11:33 PM,MU,312.15,Technology,Semis,150000,46822500,10.76,98.49,,2026-01-02`;
-
-// Store uploaded files metadata and content
-interface UploadedFile {
-  date: string;
-  name: string;
-  content: string; // Dynamic CSV content
-  timestamp: number;
-}
-
-// --- INDEXED DB HELPER ---
-const DB_NAME = 'InstiTradeDB';
-const STORE_NAME = 'uploads';
-const DB_VERSION = 1;
-
-const initDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'date' });
-      }
-    };
-  });
-};
-
-const saveToDB = async (file: UploadedFile): Promise<void> => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.put(file);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-};
-
-const loadFromDB = async (): Promise<UploadedFile[]> => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
-};
+101: 4:12:17 PM,MNDY,142.77,Technology,,452299,64574728,8.86,99.65,10.0,2025-09-15
+102: 4:12:00 PM,SNY,47.51,Healthcare,Pharma,693720,32958637,8.77,99.12,,2025-12-19
+103: 4:11:33 PM,MU,312.15,Technology,Semis,150000,46822500,10.76,98.49,,2026-01-02`;
 
 // In-memory cache
-let uploadedFiles: UploadedFile[] = [];
+let allTradesCache: Trade[] = [];
 
-// Initialize function to populate cache on app start
+// Initialize function
 export const initializeDataService = async () => {
-  try {
-    uploadedFiles = await loadFromDB();
-  } catch (e) {
-    console.error("Failed to load from IndexedDB", e);
+  // Sync the cache from Supabase on start
+  await syncCacheFromSupabase();
+};
+
+const syncCacheFromSupabase = async () => {
+  const { data, error } = await supabase
+    .from('trades')
+    .select('*')
+    .order('last_date', { ascending: false });
+
+  if (error) {
+    console.error("Supabase Fetch Error:", error);
+    return;
+  }
+
+  if (data && data.length > 0) {
+    // Map database fields back to Trade interface
+    allTradesCache = data.map((t: any) => ({
+      id: t.id,
+      ticker: t.ticker,
+      tradePrice: t.trade_price,
+      sector: t.sector,
+      industry: t.industry,
+      shares: t.shares,
+      value: t.value * 1, // Ensure number
+      rs: t.rs * 1,
+      pct: t.pct * 1,
+      rank: t.rank,
+      lastDate: t.last_date,
+      time: t.time,
+      hash: "0x" + Math.floor(Math.random() * 16777215).toString(16).padEnd(6, '0') + "..." + Math.floor(Math.random() * 65535).toString(16),
+      convictionScore: 0, // Recalculated in processTrades
+      whaleForceScore: 0,
+      defenseScore: 1,
+      sentimentCategory: 'MOMENTUM',
+      sentimentVibe: ''
+    }));
   }
 };
 
@@ -171,42 +154,51 @@ export interface UploadResult {
 }
 
 export const registerUpload = async (date: string, fileName: string, content?: string): Promise<UploadResult> => {
-  const newFile = {
-    date,
-    name: fileName,
-    content: content || "",
-    timestamp: Date.now()
-  };
+  if (!content) return { success: false, message: "No content provided" };
 
   try {
-    // Save to DB first
-    await saveToDB(newFile);
-    
-    // Update memory
-    const existingIdx = uploadedFiles.findIndex(f => f.date === date);
-    if (existingIdx !== -1) {
-      uploadedFiles[existingIdx] = newFile;
-    } else {
-      uploadedFiles.push(newFile);
-    }
-    
+    const rawTrades = parseCSVContent(content, date);
+
+    // Transform for Supabase (Snake Case to match Postgres)
+    const dbTrades = rawTrades.map(t => ({
+      ticker: t.ticker,
+      trade_price: t.tradePrice,
+      sector: t.sector,
+      industry: t.industry,
+      shares: t.shares,
+      value: t.value,
+      rs: t.rs,
+      pct: t.pct,
+      rank: t.rank,
+      last_date: t.lastDate,
+      time: t.time
+    }));
+
+    const { error } = await supabase
+      .from('trades')
+      .upsert(dbTrades, { onConflict: 'ticker,last_date,time,value' });
+
+    if (error) throw error;
+
+    // Re-sync cache after upload
+    await syncCacheFromSupabase();
+
     return { success: true };
   } catch (e: any) {
-    console.error("Failed to save uploads to DB", e);
-    return { success: false, message: "Storage failed. Check browser quota." };
+    console.error("Supabase Upload Error:", e);
+    return { success: false, message: e.message || "Database upload failed." };
   }
 };
 
 export const getUploadsForDate = (date: string) => {
-  return uploadedFiles.filter(f => f.date === date);
+  return allTradesCache.filter(t => t.lastDate === date);
 };
 
 // Helper: Raw Parsing
 const parseCSVContent = (content: string, forceDate?: string): any[] => {
   const lines = content.split('\n');
   const temp: any[] = [];
-  
-  // Basic CSV parser
+
   const parseCSVLine = (line: string): string[] => {
     const result = [];
     let start = 0;
@@ -227,21 +219,14 @@ const parseCSVContent = (content: string, forceDate?: string): any[] => {
     const line = lines[i].trim();
     if (!line) continue;
     const cols = parseCSVLine(line);
-    
-    // Safety check for malformed lines
-    if (cols.length < 5) continue; 
-    
+    if (cols.length < 5) continue;
+
     const rank = cols[9] ? parseInt(cols[9]) : null;
     const rs = parseFloat(cols[7]);
     const val = parseInt(cols[6]);
     const ticker = cols[1];
 
-    const pseudoHash = "0x" + Math.floor(Math.random() * 16777215).toString(16).padEnd(6, '0') + "..." + Math.floor(Math.random() * 65535).toString(16);
-    
     temp.push({
-      id: `${ticker}-${i}-${Math.random()}`, // Unique ID
-      hash: pseudoHash,
-      time: cols[0],
       ticker: ticker,
       tradePrice: parseFloat(cols[2]),
       sector: cols[3],
@@ -251,41 +236,30 @@ const parseCSVContent = (content: string, forceDate?: string): any[] => {
       rs: rs,
       pct: parseFloat(cols[8]),
       rank: rank,
-      lastDate: forceDate || cols[10] || '2026-01-05', 
+      lastDate: forceDate || cols[10] || '2026-01-05',
+      time: cols[0]
     });
   }
   return temp;
 };
 
-// Now async to support lazy loading if needed, though we cache in memory
 export const fetchAllTrades = async (): Promise<Trade[]> => {
-    // Ensure cache is loaded if empty (fallback)
-    if (uploadedFiles.length === 0) {
-        await initializeDataService();
-    }
-    return processTradesFromSources();
+  // If cache is empty, try to sync one last time
+  if (allTradesCache.length === 0) {
+    await syncCacheFromSupabase();
+  }
+  return processTradesFromSources();
 };
 
 const processTradesFromSources = (): Trade[] => {
   let tempTrades: any[] = [];
 
-  // Check if we have an upload for the default hardcoded date
-  const hasHardcodedDateUpload = uploadedFiles.some(f => f.date === '2026-01-05');
-
-  // 1. Parse Hardcoded Data (Only if no upload exists for this date)
-  if (!hasHardcodedDateUpload) {
-    const staticTrades = parseCSVContent(RAW_CSV, '2026-01-05');
-    tempTrades = [...staticTrades];
+  // 1. Fallback to Hardcoded Data if database is completely empty
+  if (allTradesCache.length === 0) {
+    tempTrades = parseCSVContent(RAW_CSV, '2026-01-05');
+  } else {
+    tempTrades = [...allTradesCache];
   }
-
-  // 2. Parse Dynamic Uploads
-  uploadedFiles.forEach(file => {
-    if (file.content) {
-        // We use the stamped date for these uploads
-        const dynamicTrades = parseCSVContent(file.content, file.date);
-        tempTrades = [...tempTrades, ...dynamicTrades];
-    }
-  });
 
   // Calculate Maximums for Scoring
   let maxRS = 0;
@@ -293,30 +267,24 @@ const processTradesFromSources = (): Trade[] => {
   let minVal = Infinity;
 
   tempTrades.forEach(t => {
-      if (t.rs > maxRS) maxRS = t.rs;
-      if (t.value > maxVal) maxVal = t.value;
-      if (t.value < minVal) minVal = t.value;
+    if (t.rs > maxRS) maxRS = t.rs;
+    if (t.value > maxVal) maxVal = t.value;
+    if (t.value < minVal) minVal = t.value;
   });
 
-  // Calculate Max Log Value
   const maxLogValue = Math.log10(maxVal > 0 ? maxVal : 1);
-  const minLogValue = Math.log10(minVal > 0 ? minVal : 1000000); 
+  const minLogValue = Math.log10(minVal > 0 ? minVal : 1000000);
 
-  // PASS 2: Calculate Scores & Intelligence Logic
+  // Calculate Scores & Intelligence Logic
   const processedTrades = tempTrades.map(t => {
-    // Legacy Score
     let convictionScore = t.rs * 2;
-    if (t.rank !== null) {
-      convictionScore += (100 - t.rank) * 2.5; 
-    }
+    if (t.rank !== null) convictionScore += (100 - t.rank) * 2.5;
 
-    // Whale Force Score
     const logVal = Math.log10(t.value > 0 ? t.value : 1);
     const rsPart = (t.rs / (maxRS || 1)) * 60;
     const valPart = (logVal / (maxLogValue || 1)) * 40;
     const whaleForceScore = rsPart + valPart;
 
-    // Defense Score
     const range = maxLogValue - minLogValue;
     let defenseScore = 1;
     if (range > 0) {
@@ -325,25 +293,19 @@ const processTradesFromSources = (): Trade[] => {
     }
     defenseScore = Math.max(1, Math.min(10, defenseScore));
 
-    // --- SENTIMENT TRANSLATOR LOGIC ---
-    // Updated for RS = Relative Size (Volume metric)
     let sentimentCategory: 'MOMENTUM' | 'CONTRARIAN' | 'STEALTH' = 'MOMENTUM';
     let sentimentVibe = "ALIGNING WITH SECTOR FLOW.";
-
     const sectorLower = (t.sector || "").toLowerCase();
     const isTech = sectorLower.includes('tech') || sectorLower.includes('semis') || sectorLower.includes('software');
     const isEnergy = sectorLower.includes('energy') || sectorLower.includes('oil');
-    
+
     if (t.rs > 20) {
-      // Very large relative size
       sentimentCategory = 'MOMENTUM';
       sentimentVibe = "MAXIMUM IMPACT BLOCK TRADE. HIGH CONVICTION ENTRY.";
     } else if (t.rs < 5 && t.value > 10000000) {
-      // Low relative size but high value (means average trade for this ticker is huge)
       sentimentCategory = 'CONTRARIAN';
       sentimentVibe = "HIGH VALUE FLOW EXECUTED ALGORITHMICALLY.";
     } else if (t.rs > 15 && (t.rank === null || t.rank > 50)) {
-       // Big size in a low ranked stock
       sentimentCategory = 'STEALTH';
       sentimentVibe = "LARGE SIZE ACCUMULATION IN LAGGING NAME.";
     } else if (isTech && t.rs > 10) {
@@ -359,6 +321,8 @@ const processTradesFromSources = (): Trade[] => {
 
     return {
       ...t,
+      id: t.id || `${t.ticker}-${t.time}-${t.lastDate}`,
+      hash: t.hash || "0x" + Math.floor(Math.random() * 16777215).toString(16).padEnd(6, '0'),
       convictionScore,
       whaleForceScore,
       defenseScore,
@@ -367,7 +331,7 @@ const processTradesFromSources = (): Trade[] => {
     };
   });
 
-  // --- WHALE DNA LOGIC ---
+  // DNA & Clusters & Gravity (Same logic as before)
   const tickerGroups: Record<string, Trade[]> = {};
   processedTrades.forEach(t => {
     if (!tickerGroups[t.ticker]) tickerGroups[t.ticker] = [];
@@ -376,21 +340,15 @@ const processTradesFromSources = (): Trade[] => {
 
   processedTrades.forEach(t => {
     const group = tickerGroups[t.ticker];
-    if (group.length > 2) { 
+    if (group.length > 2) {
       const totalGroupVal = group.reduce((sum, item) => sum + item.value, 0);
       const avgRank = group.reduce((sum, item) => sum + (item.rank || 100), 0) / group.length;
-
-      if (totalGroupVal > 100000000) {
-        t.behavioralTag = "WHALE";
-      } else if (avgRank < 20) {
-        t.behavioralTag = "BLITZ";
-      } else {
-        t.behavioralTag = "ACCUMULATOR";
-      }
+      if (totalGroupVal > 100000000) t.behavioralTag = "WHALE";
+      else if (avgRank < 20) t.behavioralTag = "BLITZ";
+      else t.behavioralTag = "ACCUMULATOR";
     }
   });
 
-  // --- INSTITUTIONAL SHADOW TRACKING ---
   const industryGroups: Record<string, Trade[]> = {};
   processedTrades.forEach(t => {
     const ind = t.industry || "Unknown";
@@ -399,39 +357,23 @@ const processTradesFromSources = (): Trade[] => {
   });
 
   Object.values(industryGroups).forEach(group => {
-    // Updated threshold for Relative Size
     const highRSTrades = group.filter(t => t.rs > 10);
-    if (highRSTrades.length > 3) {
-      highRSTrades.forEach(t => {
-        t.shadowCluster = true;
-      });
-    }
+    if (highRSTrades.length > 3) highRSTrades.forEach(t => { t.shadowCluster = true; });
   });
 
-  // --- CAPITAL GRAVITY LOGIC ---
   Object.values(tickerGroups).forEach(group => {
     group.sort((a, b) => a.tradePrice - b.tradePrice);
     for (let i = 0; i < group.length; i++) {
       const current = group[i];
       let clusterVol = current.value;
       let clusterCount = 1;
-      
       for (let j = i + 1; j < group.length; j++) {
         const next = group[j];
         const variance = Math.abs((next.tradePrice - current.tradePrice) / current.tradePrice);
-        
-        if (variance <= 0.01) { 
-           clusterVol += next.value;
-           clusterCount++;
-        }
+        if (variance <= 0.01) { clusterVol += next.value; clusterCount++; }
       }
-
       if (clusterCount > 1) {
-        current.gravity = {
-          isAnchor: true,
-          totalVolumeAtLevel: clusterVol,
-          clusterCount: clusterCount
-        };
+        current.gravity = { isAnchor: true, totalVolumeAtLevel: clusterVol, clusterCount: clusterCount };
         delete current.behavioralTag;
       }
     }
@@ -440,58 +382,21 @@ const processTradesFromSources = (): Trade[] => {
   return processedTrades;
 };
 
-// --- BITCOIN CONTEXT ENGINE ---
-// Simulates an AI-Check on Bitcoin price movement alignment
 export const applyBitcoinIntel = (trades: Trade[], date: string): Trade[] => {
-   // Simulated BTC Moves for known dates (Mock Oracle)
-   const btcMoves: Record<string, number> = {
-      '2026-01-02': 1.2, // Stable Up
-      '2026-01-05': -0.4, // Flat
-      '2026-01-06': -2.5, // Dip
-      '2026-01-07': 5.4, // Pump
-      '2026-01-08': -0.8 // Flat
-   };
-   
-   // Default to small random move if date unknown to simulate 'live' feed
-   const move = btcMoves[date] !== undefined ? btcMoves[date] : (Math.random() * 2 - 1);
-   
-   return trades.map(t => {
-      const sector = (t.sector || "").toLowerCase();
-      const isCorrelatedSector = sector.includes('tech') || sector.includes('financial') || sector.includes('comm');
-      const isCryptoProxy = ['COIN','MSTR','SQ','HOOD','RIOT','MARA','CLSK','PYPL'].includes(t.ticker);
-      
-      let ctx = undefined;
-
-      // Logic: If Crypto Proxy OR (Tech/Fin Sector AND BTC Move is significant)
-      if (isCryptoProxy || (isCorrelatedSector && Math.abs(move) > 1.5)) {
-          
-          if (move > 2 && t.rs > 15) { // Adjusted RS threshold for "High Size" context
-             ctx = { 
-               active: true, 
-               tag: 'BTC_SYMPATHY_PLAY', 
-               trend: 'UP', 
-               reason: `Aligned with BTC +${move}% surge`,
-               btcMove: move
-             };
-          } else if (move < -2 && t.rs < 5) {
-             ctx = { 
-               active: true, 
-               tag: 'CRYPTO_DRAG', 
-               trend: 'DOWN', 
-               reason: `Weighed down by BTC ${move}% drop`,
-               btcMove: move
-             };
-          } else if (isCryptoProxy) {
-             ctx = { 
-               active: true, 
-               tag: 'BLOCKCHAIN_BETA', 
-               trend: move > 0 ? 'UP' : 'DOWN', 
-               reason: 'Direct crypto ecosystem exposure',
-               btcMove: move
-             };
-          }
-      }
-      
-      return { ...t, btcContext: ctx } as Trade;
-   });
+  const btcMoves: Record<string, number> = {
+    '2026-01-02': 1.2, '2026-01-05': -0.4, '2026-01-06': -2.5, '2026-01-07': 5.4, '2026-01-08': -0.8
+  };
+  const move = btcMoves[date] !== undefined ? btcMoves[date] : (Math.random() * 2 - 1);
+  return trades.map(t => {
+    const sector = (t.sector || "").toLowerCase();
+    const isCorrelatedSector = sector.includes('tech') || sector.includes('financial') || sector.includes('comm');
+    const isCryptoProxy = ['COIN', 'MSTR', 'SQ', 'HOOD', 'RIOT', 'MARA', 'CLSK', 'PYPL'].includes(t.ticker);
+    let ctx = undefined;
+    if (isCryptoProxy || (isCorrelatedSector && Math.abs(move) > 1.5)) {
+      if (move > 2 && t.rs > 15) { ctx = { active: true, tag: 'BTC_SYMPATHY_PLAY', trend: 'UP', reason: `Aligned with BTC +${move}% surge`, btcMove: move }; }
+      else if (move < -2 && t.rs < 5) { ctx = { active: true, tag: 'CRYPTO_DRAG', trend: 'DOWN', reason: `Weighed down by BTC ${move}% drop`, btcMove: move }; }
+      else if (isCryptoProxy) { ctx = { active: true, tag: 'BLOCKCHAIN_BETA', trend: move > 0 ? 'UP' : 'DOWN', reason: 'Direct crypto ecosystem exposure', btcMove: move }; }
+    }
+    return { ...t, btcContext: ctx } as Trade;
+  });
 }
