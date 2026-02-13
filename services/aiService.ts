@@ -5,11 +5,9 @@ import { Trade, NaturalFilter } from '../types';
 let groq: Groq | null = null;
 function getGroq(): Groq {
   if (!groq) {
-    // SEC-03: Use explicit origin to ensure base URL resolves correctly in all environments
-    const baseURL = `${window.location.origin}/api/groq`;
     groq = new Groq({
       apiKey: 'gsk_proxy_placeholder_key_to_bypass_sdk_validation',
-      baseURL: baseURL,
+      baseURL: '/api/groq',
       dangerouslyAllowBrowser: true
     });
   }
