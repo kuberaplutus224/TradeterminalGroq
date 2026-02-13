@@ -13,13 +13,23 @@ export default defineConfig(({ mode }) => {
         '/api/groq': {
           target: 'https://api.groq.com',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/groq/, ''),
+          rewrite: (path) => {
+            const rewritten = path.replace(/^\/api\/groq/, '');
+            console.log(`[Proxy] ${path} -> ${rewritten}`);
+            return rewritten;
+          },
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req) => {
+              console.log(`[Proxy] Request: ${req.method} ${req.url}`);
               // Inject the API key server-side — never sent to the browser
               if (env.GROQ_API_KEY) {
                 proxyReq.setHeader('Authorization', `Bearer ${env.GROQ_API_KEY}`);
+              } else {
+                console.error('[Proxy] CRITICAL: GROQ_API_KEY NOT FOUND IN ENV');
               }
+            });
+            proxy.on('proxyRes', (proxyRes, req, res) => {
+              console.log(`[Proxy] Response code: ${proxyRes.statusCode}`);
             });
           },
         },

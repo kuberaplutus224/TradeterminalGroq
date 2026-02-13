@@ -5,9 +5,11 @@ import { Trade, NaturalFilter } from '../types';
 let groq: Groq | null = null;
 function getGroq(): Groq {
   if (!groq) {
+    const baseURL = `${window.location.origin}/api/groq`;
+    console.log("[AI Service] Initializing Groq SDK with baseURL:", baseURL);
     groq = new Groq({
       apiKey: 'gsk_proxy_placeholder_key_to_bypass_sdk_validation',
-      baseURL: '/api/groq/openai/v1',
+      baseURL: baseURL,
       dangerouslyAllowBrowser: true
     });
   }
