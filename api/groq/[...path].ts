@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // Extract the path after /api/groq (e.g., chat/completions)
+    // Extract the path after /api/groq (e.g., openai/v1/chat/completions)
     const path = req.url?.replace(/^\/api\/groq\/?/, '') || '';
-    const groqApiUrl = `https://api.groq.com/openai/v1/${path}`;
+    // The SDK already appends openai/v1, so we just append the path to the base domain
+    const groqApiUrl = `https://api.groq.com/${path}`;
 
     const apiKey = process.env.GROQ_API_KEY;
 
