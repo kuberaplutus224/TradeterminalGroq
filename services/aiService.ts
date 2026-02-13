@@ -7,7 +7,7 @@ function getGroq(): Groq {
   if (!groq) {
     groq = new Groq({
       apiKey: 'gsk_proxy_placeholder_key_to_bypass_sdk_validation',
-      baseURL: '/api/groq',
+      baseURL: '/api/groq/openai/v1',
       dangerouslyAllowBrowser: true
     });
   }

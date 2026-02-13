@@ -9,6 +9,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Construct the target URL for Groq API
     const groqApiUrl = `https://api.groq.com/${path}`;
 
+    console.log(`[Vercel Proxy] Forwarding ${req.method} ${urlPath} to ${groqApiUrl}`);
+
     const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
