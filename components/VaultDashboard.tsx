@@ -53,18 +53,46 @@ const VaultDashboard: React.FC<VaultDashboardProps> = ({ onDataUpdate }) => {
     }
   };
 
+  // SEC-06: File upload validation constants
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
+  const ALLOWED_MIME_TYPES = [
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain', // Some systems report CSV as text/plain
+  ];
+
   const handleFileUpload = (file: File) => {
     if (!selectedDate) return;
-    setIsProcessing(true);
     setUploadError(null);
 
+    // SEC-06: Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is 10MB.`);
+      return;
+    }
+
+    // SEC-06: Validate file extension
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
+      setUploadError(`Invalid file type "${fileExtension}". Only .csv, .xlsx, .xls are allowed.`);
+      return;
+    }
+
+    // SEC-06: Validate MIME type (when available)
+    if (file.type && !ALLOWED_MIME_TYPES.includes(file.type)) {
+      setUploadError(`Unrecognized file format. Please use a valid spreadsheet file.`);
+      return;
+    }
+
+    setIsProcessing(true);
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     const reader = new FileReader();
 
     reader.onload = async (e) => {
       const data = e.target?.result;
       if (data) {
-        // Pass either string (CSV) or ArrayBuffer (Excel)
         const result = await registerUpload(selectedDate, file.name, data as string | ArrayBuffer);
 
         if (result.success) {

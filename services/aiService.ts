@@ -1,24 +1,44 @@
 import Groq from "groq-sdk";
 import { Trade, NaturalFilter } from '../types';
 
-// Initialize Groq Client lazily
+// SEC-03: Groq client now routes through Vite dev proxy (no real API key in browser)
 let groq: Groq | null = null;
 function getGroq(): Groq {
   if (!groq) {
-    // @ts-ignore: process.env is assumed to be available
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      throw new Error("GROQ_API_KEY is not configured. AI features are unavailable.");
-    }
+    // SEC-03: Use explicit origin to ensure base URL resolves correctly in all environments
+    const baseURL = `${window.location.origin}/api/groq`;
     groq = new Groq({
-      apiKey,
-      dangerouslyAllowBrowser: true // Necessary for client-side demo
+      apiKey: 'gsk_proxy_placeholder_key_to_bypass_sdk_validation',
+      baseURL: baseURL,
+      dangerouslyAllowBrowser: true
     });
   }
   return groq;
 }
 
 const MODEL = "llama-3.3-70b-versatile";
+
+// SEC-04: Sanitize user input before embedding in AI prompts
+const sanitizeInput = (input: string, maxLength: number = 500): string => {
+  return input
+    .slice(0, maxLength)                // Limit length
+    .replace(/[{}[\]<>]/g, '')          // Strip structural characters
+    .replace(/\\/g, '')                 // Strip backslashes
+    .replace(/\n/g, ' ')               // Flatten newlines
+    .trim();
+};
+
+// SEC-05: Safe JSON parser with type validation
+const safeParseJSON = <T>(text: string, fallback: T): T => {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed === null || parsed === undefined) return fallback;
+    return parsed;
+  } catch {
+    console.warn("Failed to parse AI response as JSON:", text?.slice(0, 100));
+    return fallback;
+  }
+};
 
 export const generateDailyBrief = async (trades: Trade[]): Promise<string[]> => {
   const summaryData = trades
@@ -51,10 +71,14 @@ export const generateDailyBrief = async (trades: Trade[]): Promise<string[]> => 
 
     const text = completion.choices[0]?.message?.content;
     if (!text) return ["Analysis unavailable."];
-    // Groq json_object might return { "insights": [...] } or just the array if we are lucky, 
-    // but usually it wants a key. Let's adjust prompt to ensure it's a valid object.
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : (parsed.insights || Object.values(parsed)[0] || []);
+
+    // SEC-05: Safe JSON parsing with fallback
+    const parsed = safeParseJSON<any>(text, null);
+    if (!parsed) return ["Analysis unavailable."];
+
+    const result = Array.isArray(parsed) ? parsed : (parsed.insights || Object.values(parsed)[0] || []);
+    // Validate that result items are strings
+    return Array.isArray(result) ? result.filter((item: unknown) => typeof item === 'string').slice(0, 5) : ["Analysis unavailable."];
   } catch (error) {
     console.error("Groq Brief Error:", error);
     return ["System currently unable to generate brief.", "Check API connection.", "Try again later."];
@@ -104,8 +128,13 @@ export const generateAnomalyDetection = async (trades: Trade[]): Promise<string[
 
     const text = completion.choices[0]?.message?.content;
     if (!text) return ["Anomaly detection failed."];
-    const parsed = JSON.parse(text);
-    return parsed.anomalies || Object.values(parsed)[0] || ["Analysis failed."];
+
+    // SEC-05: Safe JSON parsing
+    const parsed = safeParseJSON<any>(text, null);
+    if (!parsed) return ["Anomaly detection failed."];
+
+    const result = parsed.anomalies || Object.values(parsed)[0] || ["Analysis failed."];
+    return Array.isArray(result) ? result.filter((item: unknown) => typeof item === 'string').slice(0, 5) : ["Analysis failed."];
   } catch (error) {
     console.error("Groq Anomaly Error:", error);
     return ["Quant layer temporarily offline.", "Unable to process correlation matrix."];
@@ -176,11 +205,39 @@ export const generatePeerReview = async (trade: Trade): Promise<string> => {
   }
 };
 
+// SEC-10: Allowed keys for NaturalFilter to prevent injection of unexpected properties
+const ALLOWED_FILTER_KEYS = new Set<string>([
+  'sector', 'industry', 'min_value', 'max_value',
+  'min_rs', 'max_rs', 'min_rank', 'max_rank',
+  'ticker', 'description'
+]);
+
+const sanitizeFilter = (raw: any): NaturalFilter | null => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+  const clean: Record<string, any> = {};
+  for (const key of Object.keys(raw)) {
+    if (ALLOWED_FILTER_KEYS.has(key)) {
+      clean[key] = raw[key];
+    }
+  }
+
+  // Must have at least one meaningful filter key
+  if (Object.keys(clean).length === 0) return null;
+  if (Object.keys(clean).length === 1 && clean.description) return null;
+
+  return clean as NaturalFilter;
+};
+
 export const parseCommand = async (query: string): Promise<NaturalFilter | null> => {
+  // SEC-04: Sanitize user input before embedding in prompt
+  const sanitizedQuery = sanitizeInput(query);
+  if (!sanitizedQuery) return null;
+
   try {
     const prompt = `Translate this trading query into a JSON filter object.
       
-      Query: "${query}"
+      Query: "${sanitizedQuery}"
       
       Rules:
       - 'Big Value' > 10000000 (10M).
@@ -202,7 +259,12 @@ export const parseCommand = async (query: string): Promise<NaturalFilter | null>
 
     const text = completion.choices[0]?.message?.content;
     if (!text) return null;
-    return JSON.parse(text);
+
+    // SEC-05: Safe parsing + SEC-10: Sanitize filter output
+    const parsed = safeParseJSON<any>(text, null);
+    if (!parsed) return null;
+
+    return sanitizeFilter(parsed);
   } catch (error) {
     console.error("Groq Command Parse Error:", error);
     return null;

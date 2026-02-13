@@ -1,66 +1,82 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TradeTerminal Alpha</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              display: ['Inter Tight', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              alpha: {
-                black: '#000000',
-                surface: '#111111',
-                border: '#333333',
-                white: '#FFFFFF',
-                money: '#00FF41', // Bright Success Green
-                dim: '#666666',
-                bitcoin: '#F7931A', // Bitcoin Orange
-              }
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- SEC-07: Content Security Policy -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:3000 https://api.groq.com;
+    img-src 'self' data: blob:;
+  " />
+  <title>TradeTerminal Alpha</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Inter Tight', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            alpha: {
+              black: '#000000',
+              surface: '#111111',
+              border: '#333333',
+              white: '#FFFFFF',
+              money: '#00FF41', // Bright Success Green
+              dim: '#666666',
+              bitcoin: '#F7931A', // Bitcoin Orange
             }
           }
         }
       }
-    </script>
-    <style>
-      body {
-        background-color: #000000;
-        color: #FFFFFF;
-      }
-      
-      /* Subtle grid, barely visible to add texture to the void */
-      .bg-grid-subtle {
-        background-size: 60px 60px;
-        background-image: 
-          linear-gradient(to right, rgba(51, 51, 51, 0.2) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(51, 51, 51, 0.2) 1px, transparent 1px);
-      }
-      
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #000000;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #333;
-        border: 2px solid #000;
-      }
-    </style>
+    }
+  </script>
+  <style>
+    body {
+      background-color: #000000;
+      color: #FFFFFF;
+    }
+
+    /* Subtle grid, barely visible to add texture to the void */
+    .bg-grid-subtle {
+      background-size: 60px 60px;
+      background-image:
+        linear-gradient(to right, rgba(51, 51, 51, 0.2) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(51, 51, 51, 0.2) 1px, transparent 1px);
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #000000;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border: 2px solid #000;
+    }
+  </style>
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

@@ -8,12 +8,28 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      // SEC-03: Proxy Groq API requests server-side to avoid exposing API key in browser
+      proxy: {
+        '/api/groq': {
+          target: 'https://api.groq.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/groq/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              // Inject the API key server-side — never sent to the browser
+              if (env.GROQ_API_KEY) {
+                proxyReq.setHeader('Authorization', `Bearer ${env.GROQ_API_KEY}`);
+              }
+            });
+          },
+        },
+      },
     },
     plugins: [react()],
+    // SEC-02: Removed GROQ_API_KEY from define — it was being inlined into the client bundle
     define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY)
+      'process.env.API_KEY': JSON.stringify(''),
+      'process.env.GEMINI_API_KEY': JSON.stringify(''),
     },
     resolve: {
       alias: {
